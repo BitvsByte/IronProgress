@@ -26,6 +26,15 @@ const User = sequelize.define("User", {
     type: DataTypes.ENUM("admin", "powerlifter", "bodybuilder"),
     defaultValue: "powerlifter",
   },
+  isVerified: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false, // Por defecto, no está verificado
+  },
+  verificationToken: {
+    type: DataTypes.STRING, // Token de verificación
+    allowNull: true,
+  },
+  
 });
 
 // Hook para encriptar la contraseña antes de guardar

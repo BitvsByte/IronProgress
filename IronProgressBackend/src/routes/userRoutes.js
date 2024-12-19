@@ -1,7 +1,8 @@
 const express = require("express");
 const User = require("../models/User");
-const { validate: isUUID } = require("uuid");
+const { validate: isUUID, v4: uuidv4 } = require("uuid"); // Importación de uuidv4
 const authMiddleware = require("../middleware/authMiddleware");
+const sendVerificationEmail = require("../services/emailService"); // Asegúrate de importar esto
 
 
 
@@ -26,6 +27,9 @@ router.post("/login", async (req, res) => {
 
     if (!user) {
       return res.status(401).json({ mensaje: "Usuario no encontrado" });
+    }
+    if (!user.isVerified) {
+      return res.status(403).json({ mensaje: "Debes verificar tu email antes de iniciar sesión." });
     }
 
     // Verificar contraseña (por ahora asumimos 'password' como campo)
@@ -56,12 +60,46 @@ router.post("/create", async (req, res) => {
       return res.status(400).json({ mensaje: "Todos los campos son obligatorios" });
     }
 
-    const newUser = await User.create({ nombre, email, password, rol });
-    res.status(201).json({ mensaje: "Usuario creado", usuario: newUser });
+    // Generar token de verificación
+    const verificationToken = uuidv4();
+
+    const newUser = await User.create({
+      nombre,
+      email,
+      password,
+      rol,
+      verificationToken,
+    });
+
+    // Enviar email de verificación
+    await sendVerificationEmail(email, verificationToken);
+
+    res.status(201).json({ mensaje: "Usuario registrado. Por favor verifica tu email." });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
+router.get("/verify-email", async (req, res) => {
+  const { token } = req.query;
+
+  try {
+    const user = await User.findOne({ where: { verificationToken: token } });
+
+    if (!user) {
+      return res.status(400).json({ mensaje: "Token inválido o expirado" });
+    }
+
+    user.isVerified = true;
+    user.verificationToken = null; // Limpiamos el token
+    await user.save();
+
+    res.json({ mensaje: "Email verificado correctamente. Ya puedes iniciar sesión." });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 // Eliminar un usuario por UUID esto es super importante porque es un identificador unico para cada usuario y no se puede repetir en la base de datos
 router.delete("/delete/:id", async (req, res) => {
@@ -121,6 +159,7 @@ router.put("/update/:id", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
 
 
 module.exports = router;
